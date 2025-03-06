@@ -1,0 +1,117 @@
+719.tex
+\documentclass[conference]{IEEEtran}
+\IEEEoverridecommandlockouts
+% The preceding line is only needed to identify funding in the first footnote. If that is unneeded, please comment it out.
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{algorithmic}
+\usepackage{graphicx}
+\usepackage{textcomp}
+\usepackage{xcolor}
+\def\BibTeX{{\rm B\kern-.05em{\sc i\kern-.025em b}\kern-.08em
+    T\kern-.1667em\lower.7ex\hbox{E}\kern-.125emX}}
+\begin{document}
+
+\title{A model for object detection and semantic segmentation applicable to the CamVid dataset\\
+{\footnotesize \textsuperscript{*}Based on YoloV3 and Deeplabv3 architectures - COMP0248}
+}
+
+\author{\IEEEauthorblockN{Jiaqi Yao}}
+
+\maketitle
+
+\begin{abstract}
+This paper presents a computer vision model based on YoloV3 and Deeplabv3 architectures for object detection and semantic segmentation tasks on the CamVid dataset. The model is optimized for the 5 classes present in the dataset, with special attention to addressing class imbalance issues. Experimental results demonstrate that our approach achieves [performance metrics] in terms of mean Average Precision (mAP) and Intersection over Union (IoU). Additionally, we explore the impact of various class imbalance handling techniques on model performance and discuss potential applications in robotic systems.
+\end{abstract}
+
+\begin{IEEEkeywords}
+computer vision, object detection, semantic segmentation, YoloV3, Deeplabv3, CamVid, class imbalance
+\end{IEEEkeywords}
+
+\section{Introduction}
+% Problem statement, relevance to robotics
+This section introduces the research background and motivation. It describes the importance of object detection and semantic segmentation in computer vision and their applications in robotics. The characteristics of the CamVid dataset and its value in urban scene understanding are explained. The main objectives and contributions of the research are clearly stated.
+
+\section{Dataset}
+% 5 class distribution, preprocessing steps, data visualization etc.
+\subsection{CamVid Dataset Overview}
+This subsection describes the basic information about the CamVid dataset, including its source, scale, and purpose. It focuses on the 5 classes used for this research and their distribution within the dataset.
+
+\subsection{Data Preprocessing}
+This subsection details the preprocessing steps applied to the original data, such as image resizing, normalization, data augmentation, etc.
+
+\subsection{Data Visualization and Analysis}
+This subsection presents visualizations of the dataset, analyzes the imbalance in class distribution, and discusses the potential impact on model training.
+
+\section{Methodology}
+% Model architecture, training details, design choices
+\subsection{Model Architecture}
+This subsection provides a detailed description of the model architecture based on YoloV3 and Deeplabv3, including network structure diagrams, layer functions, and connection methods.
+
+\subsection{Design Choices and Innovations}
+This subsection explains the key decisions in model design and specific optimizations made for the CamVid dataset.
+
+\subsection{Training Strategy}
+This subsection introduces the training process, loss function selection, optimizer settings, and other details.
+
+\section{Experimental Setup}
+% hyperparameters, etc.
+\subsection{Experimental Environment}
+This subsection describes the hardware and software environment used for the experiments.
+
+\subsection{Hyperparameter Settings}
+This subsection lists in detail the hyperparameters used in the training process, such as learning rate, batch size, number of epochs, etc., and explains the reasons for these choices.
+
+\subsection{Evaluation Metrics}
+This subsection explains the metrics used to evaluate model performance, such as mAP, IoU, etc., and the calculation methods for these metrics.
+
+\section{Results}
+% mAP/IoU scores, class-wise analysis, qualitative results
+\subsection{Overall Performance}
+This subsection presents the overall performance of the model on the test set, including average precision and IoU scores.
+
+\subsection{Class Analysis}
+This subsection analyzes the performance differences across classes, identifying which classes perform well and which perform poorly, and discussing possible reasons.
+
+\subsection{Qualitative Results}
+This subsection presents some intuitive visual results, comparing model predictions with ground truth annotations.
+
+\section{Class Imbalance}
+% Techniques tested, impact on performance, comparison
+\subsection{Class Imbalance Handling Techniques}
+This subsection introduces various techniques tested to address the class imbalance issues in the dataset, such as resampling, weighted loss functions, etc.
+
+\subsection{Impact on Performance}
+This subsection analyzes the impact of various class imbalance handling techniques on overall model performance and performance across different classes.
+
+\subsection{Technique Comparison}
+This subsection compares the advantages and disadvantages of different techniques and proposes the most suitable solution for this task.
+
+\section{Discussion}
+% discuss results and limitations
+\subsection{Result Analysis}
+This subsection provides an in-depth discussion of the experimental results, analyzing the strengths and weaknesses of the model.
+
+\subsection{Limitations}
+This subsection honestly points out the limitations of the research, such as dataset constraints, computational resource limitations, etc.
+
+\subsection{Potential Applications}
+This subsection explores the potential uses of the model in practical application scenarios, especially in the field of robotics.
+
+\section{Conclusion}
+% Lessons learned, future work
+This section summarizes the main findings and contributions of the research. It reflects on the lessons learned throughout the research process and proposes possible future research directions and improvements.
+
+% Keep the original references format and acknowledgment section
+\section*{Acknowledgment}
+Thanks to [relevant personnel/institutions] for their support of this research.
+
+\begin{thebibliography}{00}
+\bibitem{b1} [YoloV3 related citation]
+\bibitem{b2} [Deeplabv3 related citation]
+\bibitem{b3} [CamVid dataset related citation]
+\bibitem{b4} [Class imbalance problem related citation]
+\bibitem{b5} [Semantic segmentation evaluation method related citation]
+\end{thebibliography}
+
+\end{document}
