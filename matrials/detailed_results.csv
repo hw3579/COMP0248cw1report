@@ -1,0 +1,7 @@
+Class,Segmentation_IoU,Detection_Accuracy
+Background,0.9764585208892822,
+Car,0.584658820182085,
+Pedestrian,0.14585025623033288,
+Bicyclist,0.24010421832402548,
+MotorcycleScooter,0.0,
+Truck_Bus,0.24134879186749458,
