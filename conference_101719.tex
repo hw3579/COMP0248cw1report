@@ -98,9 +98,9 @@ The preprocessed data is shown below:
 % Model architecture, training details, design choices
 \subsection{Model Architecture}
 
-% 在模型的构建上我们借助了DeeplabV3和Yolo的思想，并将两个模型融合起来。他们共同使用一个特征提取头（ResNet50），然后分别用于目标检测和语义分割任务。其中的语义分割部分，我们使用了DeeplabV3的骨干网络，即ASPP（空间金字塔池化模块），并在其基础上进行了改进了输出头，以适应CamVid数据集的特点。目标检测部分，将yolo的输出头进行简化并且拼接到特征提取头的后面。
+% 在模型的构建上我们借助了DeeplabV3和Yolo的思想，并将两个模型融合起来。他们共同使用一个特征提取头（ResNet50），然后分别用于目标检测和语义分割任务。其中的语义分割部分，我们使用了DeeplabV3的骨干网络，即ASPP（空间金字塔池化模块），并在其基础上进行了改进了输出头，以适应CamVid数据集的特点。目标检测部分，将yolo的输出头进行简化并且拼接到特征提取头的后面。这里的yolo输出头使用v2v3的架构使用卷积层代替了v1的全连接层，以提高模型的性能。
 
-In the construction of the model, we borrowed ideas from DeeplabV3 and Yolo and combined the two models. They share a common feature extraction backbone (ResNet50) and are then used for object detection and semantic segmentation tasks, respectively. For the semantic segmentation part, we used the DeeplabV3 backbone network, namely ASPP (Atrous Spatial Pyramid Pooling), and improved the output head based on it to adapt to the characteristics of the CamVid dataset. For the object detection part, we simplified the output head of Yolo and concatenated it to the back of the feature extraction backbone.
+In the construction of the model, we borrowed ideas from DeeplabV3 and Yolo and combined the two models. They share a common feature extraction backbone (ResNet50) and are then used for object detection and semantic segmentation tasks, respectively. For the semantic segmentation part, we used the DeeplabV3 backbone network, namely ASPP (Atrous Spatial Pyramid Pooling), and improved the output head based on it to adapt to the characteristics of the CamVid dataset. For the object detection part, we simplified the output head of Yolo and concatenated it to the back of the feature extraction backbone. The Yolo output head here uses the architecture of v2v3, replacing the fully connected layers of v1 with convolutional layers to improve the performance of the model.
 
 % 模型架构如下图3所示
 The model architecture is shown in Figure \ref{fig:architecture}.
@@ -188,30 +188,30 @@ Because in the default YOLOv1, Sx=Sy=7, C=20, B=2. In the CamVid dataset, the im
 % 输入特征图
 \node[block] (input) {Input Feature Map\\\((S_x \times S_y \times 2048)\)};
 
-% Flatten
-\node[block, below=1.5cm of input] (flatten) {Flatten\\\((S_x \times S_y \times 2048) \to (S_x S_y \times 2048)\)};
+% Conv1
+\node[block, below=1.5cm of input] (conv1) {Conv2d (2048, 1024, 3x3, padding=1)\\BatchNorm2d (1024)\\LeakyReLU (0.1)};
 
-% 全连接层1
-\node[block, below=1.5cm of flatten] (fc1) {Fully Connected\\Linear (2048*Sx*Sy, 4096)\\LeakyReLU (0.1)};
+% Conv2
+\node[block, below=1.5cm of conv1] (conv2) {Conv2d (1024, 512, 3x3, padding=1)\\BatchNorm2d (512)\\LeakyReLU (0.1)};
 
-% Dropout 层
-\node[block, below=1.5cm of fc1] (dropout) {Dropout (0.5)};
+% Conv3
+\node[block, below=1.5cm of conv2] (conv3) {Conv2d (512, 256, 3x3, padding=1)\\BatchNorm2d (256)\\LeakyReLU (0.1)};
 
-% 全连接层2（最终输出）
-\node[block, below=1.5cm of dropout] (fc2) {Fully Connected\\Linear (4096, \(S_x \times S_y \times (C + 5B)\))};
+% 输出层
+\node[block, below=1.5cm of conv3] (conv_out) {Conv2d (256, \(C + 5B\), 1x1)};
 
 % 输出
-\node[block, below=1.5cm of fc2] (output) {Output\\\((S_x \times S_y \times (C + 5B))\)};
+\node[block, below=1.5cm of conv_out] (output) {Output\\\((S_x \times S_y \times (C + 5B))\)};
 
 % 连接箭头
-\draw[->] (input.south) -- (flatten.north);
-\draw[->] (flatten.south) -- (fc1.north);
-\draw[->] (fc1.south) -- (dropout.north);
-\draw[->] (dropout.south) -- (fc2.north);
-\draw[->] (fc2.south) -- (output.north);
+\draw[->] (input.south) -- (conv1.north);
+\draw[->] (conv1.south) -- (conv2.north);
+\draw[->] (conv2.south) -- (conv3.north);
+\draw[->] (conv3.south) -- (conv_out.north);
+\draw[->] (conv_out.south) -- (output.north);
 
 % 用虚线框标注 YOLO Head
-\node[bigblock, fit=(flatten)(fc1)(dropout)(fc2), label=above:\textbf{YOLO Head}] (yolo_head) {};
+\node[bigblock, fit=(conv1)(conv2)(conv3)(conv_out), label=above:\textbf{YOLO Head}] (yolo_head) {};
 
 \end{tikzpicture}
 
@@ -314,18 +314,100 @@ To prevent overfitting on the relatively small CamVid dataset, we implemented an
 
 
 \subsection{Evaluation Metrics}
-This subsection explains the metrics used to evaluate model performance, such as mAP, IoU, etc., and the calculation methods for these metrics.
+% This subsection explains the metrics used to evaluate model performance, such as mAP, IoU, etc., and the calculation methods for these metrics.
+
+% 在这里我们使用了两个主要的评估指标：miou和map。其中miou主要用于语义分割任务，map主要用于目标检测任务。
+
+% miou是交并比（IoU）的平均值，计算公式如下：
+
+
+Here we used two main evaluation metrics: mIoU and mAP. mIoU is mainly used for semantic segmentation tasks, while mAP is mainly used for object detection tasks.
+
+\[IoU = \frac{TP}{TP + FP + FN}\]
+\[mIoU = \frac{1}{N} \sum_{i=1}^{N} IoU_i\]
+
+% map是平均精度（AP）的平均值，计算公式如下：
+
+mAP is the average of the average precision (AP), calculated as follows:
+
+\[AP = \frac{1}{11} \sum_{r \in \{0.0, 0.1, \ldots, 1.0\}} p(r)\]
+
+\[mAP = \frac{1}{C} \sum_{c=1}^{C} AP_c\]
+
+% 其中，TP表示真阳性，FP表示假阳性，FN表示假阴性，N表示类别数，C表示类别数。
+
+Where TP is true positive, FP is false positive, FN is false negative, N is the number of classes, and C is the number of classes.
 
 \section{Results}
 % mAP/IoU scores, class-wise analysis, qualitative results
 \subsection{Overall Performance}
-This subsection presents the overall performance of the model on the test set, including average precision and IoU scores.
+% This subsection presents the overall performance of the model on the test set, including average precision and IoU scores.
+
+% 在训练好模型后，我们在验证集上进行了评估，得到了以下结果：
+% 语义分割部分：
+% miou如下图所示
+
+After training the model, we evaluated it on the validation set and obtained the following results:
+For the semantic segmentation part:
+The mIoU is shown in the figure below:
+
+% 其中少数类已用红色进行标出（摩托车和公交车）
+
+Where minority classes are highlighted in red (motorcycles and buses).
+
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.5\textwidth]{matrials/class_performance.png}}
+    \caption{Mean IoU (mIoU) on the validation set}
+    \label{fig:miou}
+\end{figure}
+
+% 混淆矩阵如下图所示
+
+The confusion matrix is shown in the figure below:
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.5\textwidth]{matrials/confusion_matrix.png}}
+    \caption{Confusion Matrix on the validation set}
+    \label{fig:confusion}
+\end{figure}
+
+% 目标检测部分：
+
+% mAP如下图所示
+
 
 \subsection{Class Analysis}
-This subsection analyzes the performance differences across classes, identifying which classes perform well and which perform poorly, and discussing possible reasons.
+% This subsection analyzes the performance differences across classes, identifying which classes perform well and which perform poorly, and discussing possible reasons.
+
+% 在语义分割的结果中，我们发现背景和汽车的miou得分较高，大概在0.976和0.585左右。这表明模型在识别这些类别时表现良好。然而，行人、自行车和公共汽车的miou得分较低，分别为0.146、0.240和0.241。特别是摩托车的miou得分为0，表明模型在识别这一类别时存在显著困难。这可能是由于数据集中摩托车样本数量极少，导致模型难以学习到有效的特征。
+
+In the results of semantic segmentation, we found that the mIoU scores for the background and cars were relatively high, around 0.976 and 0.585, respectively. This indicates that the model performs well in recognizing these classes. However, the mIoU scores for pedestrians, bicycles, and buses were low, at 0.146, 0.240, and 0.241, respectively. In particular, the mIoU score for motorcycles was 0, indicating significant difficulties in recognizing this class. This may be due to the extremely small number of motorcycle samples in the dataset, making it difficult for the model to learn effective features. 
 
 \subsection{Qualitative Results}
-This subsection presents some intuitive visual results, comparing model predictions with ground truth annotations.
+% This subsection presents some intuitive visual results, comparing model predictions with ground truth annotations.
+
+% 为了更直观地展示模型的性能，我们提供了一些可视化结果，将模型的预测与地面实况注释进行比较。如下图所示：
+
+To more intuitively demonstrate the model's performance, we provide some visual results comparing the model's predictions with ground truth annotations. As shown in the figure below:
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.5\textwidth]{matrials/segmentation_results.png}}
+    \caption{Semantic Segmentation Results}
+    \label{fig:segmentation}
+\end{figure}
+
+% 使用yolo检测框的结果如下
+
+The results using Yolo detection boxes are as follows:
+
+\begin{figure}[htbp]
+    \centerline{\includegraphics[width=0.5\textwidth]{matrials/detection_results.png}}
+    \caption{Object Detection Results}
+    \label{fig:detection}
+\end{figure}
+
+
 
 \section{Class Imbalance}
 % Techniques tested, impact on performance, comparison
