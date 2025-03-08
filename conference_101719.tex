@@ -17,7 +17,7 @@
 \begin{document}
 
 \title{A model for object detection and semantic segmentation applicable to the CamVid dataset\\
-{\footnotesize \textsuperscript{*}Based on YoloV3 and Deeplabv3 architectures - COMP0248}
+{\footnotesize \textsuperscript{*}Based on Yolo and Deeplabv3+ architectures - COMP0248}
 }
 
 \author{\IEEEauthorblockN{Jiaqi Yao}}
@@ -59,14 +59,21 @@ To address these challenges, we reprogram and build the model with the help of i
 The CamVid dataset is a relatively small dataset compared to others like COCO and Cityscapes. It consists of street scene images and corresponding pixel-level annotations for semantic segmentation tasks. The dataset contains 32 classes, but we focus only on five classes: cars, pedestrians, bicycles, motorcycles, and buses, with the rest labeled as background. Additionally, we generate bounding box annotations suitable for object detection tasks based on the corresponding pixel-level annotations.
 
 \subsection{Data Preprocessing}
-%  对于数据的预处理， camvid提供的标签是灰度的掩码图像，是可以直接被用于语义分割的训练。 我们需要做的就是增加一个过滤器，将原有的标签图像进行过滤使其只保留5个我们关系的类别，并将其转换为像素值为0-5的标签图像。（0表示背景） 。
+%  对于数据的预处理， camvid提供的标签是灰度的掩码图像，是可以直接被用于语义分割的训练。 我们需要做的就是增加一个过滤器，将原有的标签图像进行过滤使其只保留5个我们关系的类别，并将其转换为像素值为0-5的标签图像。（0表示背景） 。 
+
+% 具体的操作为： 首先读取包含元数据映射关系的csv文件 之后对其使用filter_classes 函数，将标签过滤，只保留我们需要的5个类别并将其他设为0（背景）。之后创建一个和原图像一样大小的全0矩阵，然后将过滤后的标签放入对应的位置。
 
 For the data preprocessing, the labels provided by CamVid are grayscale mask images that can be directly used for semantic segmentation training. We need to add a filter to the original label images to retain only the five classes we are interested in and convert them into label images with pixel values of 0-5 (0 represents background).
 
-% 此外，对于物品检测框的构建，首先过滤掉面积过小的像素，然后根据连通域分析的方法筛选出需要绘制目标检测框的区域，最后将其按照yolo的格式转换为目标检测的标签。 例子如下所示：
+The details are as follows: first, read the CSV file containing the metadata mapping, then use the \textbf{filter\_classes} function to filter the labels, keeping only the five classes we need and setting the rest to 0 (background). Then create a full zero matrix the same size as the original image and place the filtered labels in the corresponding positions.
 
-In addition, for the construction of object detection boxes, we first filter out pixels with small areas, then select the regions that need to draw object detection boxes based on the method of connected domain analysis, and finally convert them into object detection labels in the format of Yolo. An example is shown below:
+% 此外，对于物品检测框的构建，首先过滤掉面积过小的像素，然后根据连通域分析的方法筛选出需要绘制目标检测框的区域，再根据每个单独区域建立物品检测框，即以像素区的上下左右四个顶点绘制检测框,之后按照cxcywh的格式转换为yolo的物品检测标签。
 
+In addition, for the construction of object detection boxes, first filter out pixels with small areas, then use the method of connected domain analysis to select the areas that need to draw object detection boxes, and then establish object detection boxes for each separate area, that is, draw detection boxes with the upper, lower, left, and right four vertices of the pixel area, and then convert them to Yolo object detection labels in the format of cxcywh.
+
+
+An example is shown below:
+% 例子如下所示：
 \begin{figure}[htbp]
     \centerline{\includegraphics[width=0.4\textwidth]{fig/yolo_format.jpg}}
     \caption{Example of Yolo Format}
@@ -78,9 +85,9 @@ In addition, for the construction of object detection boxes, we first filter out
 At this point, the shape of each label is (Sx, Sy, C+B*5), where Sx and Sy are the dimensions of the image block, C is the number of classes, and B is the number of bounding boxes per grid cell.
 
 
-% 此外，关于数据类型不平衡的特点，我们构建了一个数据筛选器和增强器，分别是对原有图像中的包含少数类的图像进行筛选（摩托车和公交车），并对其进行数据增强，以增加数据的多样性。具体的实现细节见后文的数据不平衡章节。
+% 此外，关于数据类型不平衡的特点，我们构建了一个数据增强器，当检测到加载的图像里面包含少数类的图像时进行增强（摩托车和公交车），以改进数据的不平衡特性。具体的实现细节见后文的数据不平衡章节。
 
-Moreover, due to the characteristics of data type imbalance, we built a data filter and enhancer, which are used to filter out images containing minority classes (motorcycles and buses) from the original images and perform data augmentation on them to increase the diversity of the data. The specific implementation details are described in the following section on data imbalance.
+Moreover, to address the issue of class imbalance, we built a data augmenter to enhance images containing minority classes (motorcycles and buses) when detected, to improve the imbalance characteristics of the data. The specific implementation details are described in the following section on class imbalance.
 
 \subsection{Data Visualization and Analysis}
 
@@ -103,58 +110,72 @@ The preprocessed data is shown below:
 In the construction of the model, we borrowed ideas from DeeplabV3 and Yolo and combined the two models. They share a common feature extraction backbone (ResNet50) and are then used for object detection and semantic segmentation tasks, respectively. For the semantic segmentation part, we used the DeeplabV3 backbone network, namely ASPP (Atrous Spatial Pyramid Pooling), and improved the output head based on it to adapt to the characteristics of the CamVid dataset. For the object detection part, we simplified the output head of Yolo and concatenated it to the back of the feature extraction backbone. The Yolo output head here uses the architecture of v2v3, replacing the fully connected layers of v1 with convolutional layers to improve the performance of the model.
 
 % 模型架构如下图3所示
-The model architecture is shown in Figure \ref{fig:architecture}.
 \begin{figure}[htbp]
     \centering
+    \scalebox{0.7}{ % 将整个图形缩小至0.8倍
     \begin{tikzpicture}[
-        block/.style={draw, fill=blue!10, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
+        block/.style={draw, fill=blue!10, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center},
         arrow/.style={-Stealth, thick},
         input/.style={draw, fill=green!10, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
         output/.style={draw, fill=red!10, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
-        module/.style={draw, fill=orange!10, rounded corners, minimum width=2.5cm, minimum height=1cm, align=center},
+        module/.style={draw, fill=orange!10, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center},
+        feature/.style={draw, fill=yellow!10, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center},
+        backbone/.style={draw, fill=blue!20, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center},
         node distance=1.3cm
     ]
     
     % 输入节点
     \node[input] (input) {Input Image};
     
-    % 特征提取节点
-    \node[block, below=of input] (backbone) {Feature Extraction \\(ResNet50)};
+    % 骨干网络部分
+    \node[backbone, below=of input] (conv1) {Conv1 + MaxPool};
+    \node[backbone, below=of conv1] (stage1) {Stage1 (ResBlock×3)};
+    \node[backbone, below=of stage1] (stage2) {Stage2 (ResBlock×3)};
+    \node[backbone, below=of stage2] (stage3) {Stage3 (ResBlock×3)};
     
-    % 分支点
-    \node[below=0.5cm of backbone] (branch) {};
+    % 分支路径
+    \node[backbone, below left=1.2cm and 1.0cm of stage3] (stage4) {Stage4\\(Standard Stride 2)};
+    \node[backbone, below right=1.2cm and 1.0cm of stage3] (stage4_2) {Stage4\_2\\(Custom Stride 3)};
     
-    % DeepLabv3分支
-    \node[module, below left=1.5cm and 1cm of branch] (aspp) {ASPP Module};
-    \node[block, below=of aspp] (seghead) {Segmentation Head \\ (DeepLabv3)};
-    \node[output, below=of seghead] (segout) {Semantic\\Segmentation};
+    % 特征提取后的路径
+    \node[module, below=of stage4] (aspp) {ASPP Module};
+    \node[block, below=of aspp] (decoder) {DeepLabV3+ Decoder};
+    \node[output, below=of decoder] (segout) {Semantic Segmentation Output};
     
-    % YoloV3分支
-    \node[module, below right=1.5cm and 1cm of branch] (detector) {Detection\\Module};
-    \node[block, below=of detector] (dethead) {Detection Head\\ (Yolo)};
-    \node[output, below=of dethead] (detout) {Object\\Detection};
+    \node[module, below=of stage4_2] (yolohead) {YOLO Head};
+    \node[output, below=of yolohead] (detout) {Object Detection Output};
     
     % 连接箭头
-    \draw[arrow] (input) -- (backbone);
-    \draw[arrow] (backbone) -- (branch);
-    \draw[arrow] (branch) -- (aspp);
-    \draw[arrow] (branch) -- (detector);
-    \draw[arrow] (aspp) -- (seghead);
-    \draw[arrow] (seghead) -- (segout);
-    \draw[arrow] (detector) -- (dethead);
-    \draw[arrow] (dethead) -- (detout);
+    \draw[arrow] (input) -- (conv1);
+    \draw[arrow] (conv1) -- (stage1);
+    \draw[arrow] (stage1) -- (stage2);
+    \draw[arrow] (stage2) -- (stage3);
+    \draw[arrow] (stage3) -- (stage4);
+    \draw[arrow] (stage3) -- (stage4_2);
+    \draw[arrow] (stage4) -- (aspp);
+    \draw[arrow] (aspp) -- (decoder);
+    \draw[arrow] (decoder) -- (segout);
+    \draw[arrow] (stage4_2) -- (yolohead);
+    \draw[arrow] (yolohead) -- (detout);
     
-    % 模型框架
-    \node[draw, dotted, fit=(backbone)(aspp)(detector)(seghead)(dethead), inner sep=0.5cm, label=above:Hybrid Architecture] {};
+    % 标注骨干网络框架
+    \node[draw, dashed, fit=(conv1)(stage1)(stage2)(stage3)(stage4)(stage4_2), inner sep=0.5cm, label=above:Modified ResNet Backbone] {};
+    
+    % 标注整体架构
+    \node[draw, dotted, fit=(conv1)(stage1)(stage2)(stage3)(stage4)(stage4_2)(aspp)(decoder)(yolohead), inner sep=0.8cm, label=above:Hybrid Detection/Segmentation Architecture] {};
     
     \end{tikzpicture}
-    \caption{The proposed hybrid architecture combining YoloV3 for object detection and DeepLabv3 for semantic segmentation with a shared feature extraction backbone.}
+    } % 缩放结束
+    \caption{Model Architecture}
     \label{fig:architecture}
 \end{figure}
 
-% 在这里Resnet50的细节架构见论文[1]，我们不再赘述。在这主要介绍ASPP模块和Yolo的输出头。
+% 在这里Resnet50的细节架构见论文[1]，我们不再赘述。这里值得注意的是为了对其yolo输出头的格式，我们对于resnet50的最后一个残差块进行了并行处理，额外分了一条支路使用步长为3的卷积连接yolo的输出头。根据计算，前三层之后的特征图大小为960/16=60，720/16=45。经过第四层卷积后，特征图大小为60/3=20，45/3=15。
 
-For the detailed architecture of ResNet50, please refer to the paper [1], and we will not repeat it here. Here we mainly introduce the ASPP module and the output head of Yolo.
+The detailed architecture of ResNet50 can be found in the paper [1], and we will not repeat it here. It is worth noting that for the format of the Yolo output head, we parallelly processed the last residual block of ResNet50, and an additional branch was created to connect the Yolo output head with a convolutional layer with a stride of 3.
+
+% 在这主要介绍ASPP模块和Yolo的输出头。
+Here we mainly introduce the ASPP module and the output head of Yolo.
 
 \begin{figure}[htbp]
     \centering
@@ -171,12 +192,14 @@ The ASPP module is the core component of DeepLabV3, which captures context infor
 
 The output head of YOLO will be directly connected to the output of ResNet50, which includes fully connected layers and activation functions, and the final output shape is (Sx, Sy, C+5B), where Sx and Sy are the dimensions of the image block, C is the number of classes, and B is the number of bounding boxes per grid cell. 
 
-% 因为在默认的yolov1中， Sx=Sy=7，C=20，B=2。 在camvid数据集中图像分辨率是960x720，为了保持移植的一致性，所以我们将Sx=8，Sy=6，C=5，B=1。 具体架构如下所示：
+% 因为在默认的yolov1中， Sx=Sy=7，C=20，B=2。 在yolov3中，三个输出尺度分别是52x52, 26x26, 13x13，这里为了保持和resnet的输出一致，我们设置Sx=20，Sy=15，C=5，B=1。具体架构如下所示：
 
-Because in the default YOLOv1, Sx=Sy=7, C=20, B=2. In the CamVid dataset, the image resolution is 960x720, to maintain consistency in porting, we set Sx=8, Sy=6, C=5, B=1. The specific architecture is as follows:
+Because in the default YOLOv1, Sx=Sy=7, C=20, B=2. In YOLOv3, the three output scales are 52x52, 26x26, 13x13. Here, to keep it consistent with the output of ResNet, we set Sx=20, Sy=15, C=5, B=1. The specific architecture is as follows:
 
 
 \begin{figure}
+\centering
+\scalebox{0.7}{
 \begin{tikzpicture}[
     font=\small, 
     node distance=1.5cm, 
@@ -213,35 +236,45 @@ Because in the default YOLOv1, Sx=Sy=7, C=20, B=2. In the CamVid dataset, the im
 % 用虚线框标注 YOLO Head
 \node[bigblock, fit=(conv1)(conv2)(conv3)(conv_out), label=above:\textbf{YOLO Head}] (yolo_head) {};
 
-\end{tikzpicture}
-
+\end{tikzpicture}}
 \caption{Yolo Output Head Architecture}
 \label{fig:yolo}
 \end{figure}
+
 
 \subsection{Design Choices and Innovations}
 % This subsection introduces the key decisions and specific optimizations made in the model design to adapt to the CamVid dataset.
 
 % 在模型设计中，我们做出了一些关键决策和特定优化，以适应CamVid数据集。
-% 对于语义分割来说，一个很重要的问题是如果按照典型的cnn模型进行连续的下采样和重复池化，不仅会导致最后特征图分辨率过低的问题，还会使得图中的大尺度和多尺度的物品被压缩进而丢失信息。在这我借用deepLabv3的思想，使用了ASPP模块来解决这个问题。ASPP模块通过多尺度的空洞卷积来捕获不同尺度的上下文信息，提高了模型的性能。此外我们还在ASPP模块的基础上进行了更新，使用空洞卷积来防止模型对大尺度物品丢失信息的情况。
 
-% 对于物品检测，由于resnet作为特征提取头已经足够优秀，在这我们只需要将yolo的全连接层往下的层接入到resnet的输出上即可。这样可以避免因为过多的参数导致的过拟合问题。
+% 从特征提取的角度来看，我们选择了公认的具有优秀表现的特征提取网络ResNet50作为我们的骨干网络，因为它在深度和计算效率之间有着出色的平衡。ResNet的创新残差连接通过提供梯度快捷方式使更深的网络能够有效训练，从而缓解了梯度消失问题。这种架构通过其分阶段设计优秀地提取了分层特征——早期层捕获低级特征如边缘和纹理，而更深层次则识别复杂的物体模式。
+
+% 我们的创新点事通过在最后的卷积阶段实现了一个双分支方法，从而修改了标准的ResNet50结构。这种修改创建了两个并行的特征提取路径：一个保持语义分割任务的原始步幅（保留空间分辨率），另一个使用自定义步幅3用于目标检测分支（降低维度但保留重要特征）。
 
 In the model design, we made some key decisions and specific optimizations to adapt to the CamVid dataset.
 
-For semantic segmentation, a critical issue is that if the typical CNN model is used for continuous downsampling and repeated pooling, it will not only lead to the problem of too low resolution of the final feature map but also compress large-scale and multi-scale objects in the image, resulting in information loss. Here, I borrowed the idea of DeepLabV3 and used the ASPP module to solve this problem. The ASPP module captures context information at different scales through multi-scale atrous convolutions, improving the performance of the model. In addition, we also updated the ASPP module to use atrous convolutions to prevent the model from losing information about large-scale objects.
+From a feature extraction perspective, we selected the widely recognized feature extraction network ResNet50 as our backbone network due to its excellent balance between depth and computational efficiency. ResNet's innovative residual connections allow deeper networks to train effectively by providing gradient shortcuts, thus mitigating the vanishing gradient problem. This architecture excels at extracting hierarchical features through its staged design - early layers capture low-level features like edges and textures, while deeper layers recognize complex object patterns.
 
-For object detection, since ResNet as the feature extraction backbone is already excellent, we only need to connect the fully connected layers of Yolo to the output of ResNet. This can avoid the problem of overfitting caused by too many parameters.
+Our innovation is to implement a dual-branch approach in the final convolution stage, thus modifying the standard ResNet50 structure. This modification creates two parallel feature extraction paths: one maintains the original stride for the semantic segmentation task (preserving spatial resolution), while the other uses a custom stride of 3 for the object detection branch (reducing dimensionality but retaining important features).
 
+
+% 对于语义分割来说，一个很重要的问题是如果按照典型的cnn模型进行连续的下采样和重复池化，不仅会导致最后特征图分辨率过低的问题，还会使得图中的大尺度和多尺度的物品被压缩进而丢失信息。在这我借用deepLabv3的思想，使用了ASPP模块来解决这个问题。ASPP模块通过多尺度的空洞卷积来捕获不同尺度的上下文信息，提高了模型的性能。此外我们还在ASPP模块的基础上进行了更新，使用空洞卷积来防止模型对大尺度物品丢失信息的情况。最后再使用deeplabv3+的输出头将输出形状设置为（CxHxW）的形式，用以代表每个像素的类别。
+
+
+For semantic segmentation, a critical issue is that if the typical CNN model is used for continuous downsampling and repeated pooling, it will not only lead to the problem of too low resolution of the final feature map but also compress large-scale and multi-scale objects in the image, resulting in information loss. Here, I borrowed the idea of DeepLabV3 and used the ASPP module to solve this problem. The ASPP module captures context information at different scales through multi-scale atrous convolutions, improving the performance of the model. In addition, we also updated the ASPP module to use atrous convolutions to prevent the model from losing information about large-scale objects. Finally, we used the output head of DeeplabV3+ to set the output shape to (CxHxW) to represent the category of each pixel.
+
+% 对于物品检测，我们参考了yolov1v2v3三个版本的思想，考虑到数据集的大小，担心过拟合的问题，只使用了一种尺度的输出网格（20*15），并且只使用了一个边界框。此外，考虑到后续版本的yolo输出头都使用了卷积层代替了全连接层，我们也使用了这种方法。这种方法可以减少参数数量，提高模型的性能。
+
+For object detection, we referred to the ideas of YOLOv1, v2, and v3. Considering the size of the dataset and the risk of overfitting, we only used one scale of output grid (20*15) and only one bounding box. In addition, considering that the output head of later versions of YOLO all used convolutional layers instead of fully connected layers, we also used this method. This method can reduce the number of parameters and improve the performance of the model.
 
 \subsection{Training Strategy}
 % This subsection introduces the training process, loss function selection, optimizer settings, and other details.
 
-% 在训练过程中的损失函数上，我们使用了交叉熵损失函数来计算deeplab语义分割的损失，使用均方差来计算yolo目标检测的损失（和yolov1一样的损失函数计算方法）。在优化器上，我们使用了Adam优化器，并设置了初始学习率为 0.001，学习率衰减为0.1，一共训练100个epoch。同时设置早停机制，当验证集上的损失不再下降时，停止训练。记录训练数据和验证数据的损失，以便后续分析。
+% 在训练过程中的损失函数上，我们使用了交叉熵损失函数来计算deeplab语义分割的损失，使用均方差来计算yolo目标检测的损失（和yolov1一样的损失函数计算方法）。在优化器上，我们使用了Adam优化器，学习率为 1e-4，一共训练500个epoch。同时设置早停机制（在100epoch后触发），当验证集上的损失不再下降时，停止训练。记录训练数据和验证数据的损失，以便后续分析。
 
 %同时为了提高训练速度，在合适的计算过程中我们开启了半精度计算（fp16）。
 
-In the training process, we used the cross-entropy loss function to calculate the loss of Deeplab semantic segmentation and the mean square error to calculate the loss of Yolo object detection (the same loss calculation method as YoloV1). For the optimizer, we used the Adam optimizer, with an initial learning rate of 0.001, a learning rate decay of 0.1, and a total of 100 epochs. We also set up an early stopping mechanism to stop training when the loss on the validation set no longer decreases. We recorded the loss of the training data and validation data for subsequent analysis.
+In the training process, we used the cross-entropy loss function to calculate the loss of Deeplab semantic segmentation and the mean square error to calculate the loss of Yolo object detection (the same loss calculation method as YOLOv1). For the optimizer, we used the Adam optimizer with a learning rate of 1e-4 and trained for a total of 500 epochs. We also set up an early stopping mechanism (triggered after 100 epochs) to stop training when the loss on the validation set no longer decreases. We recorded the loss of the training data and validation data for subsequent analysis.
 
 To improve training speed, we enabled mixed precision computing (fp16) in appropriate calculations.
 
@@ -256,15 +289,15 @@ Another point worth noting is that we enabled focal loss in the loss function, w
 
 %所有的训练都是在CS服务器上进行的，并且结果都是可以复现的。我们在数据加载中设置的批次大小是按照16G显存的gpu进行设置的，并且在合适的地方开启了半精度计算。
 
-%相关的pytorch版本是2.6 cuda版本12.6， python版本应该是3.9以上都可以（3.8测试也没问题）。 其中使用的外部库除了常用的numpy，json外还使用了opencv用作联通域分析。相关仓库的github连接将会附在报告后面。
+%相关的pytorch版本是2.6 cuda版本12.6， python版本应该是3.9以上都可以（3.8和最新的3.13在测试后也没问题）。 其中使用的外部库除了常用的numpy，json外还使用了opencv用作联通域分析。相关仓库的github连接将会附在报告后面。用到的库基本都是常用库。
 
 All training was done on the CS server, and the results are reproducible. The batch size set in the data loading is based on the 16G GPU, and mixed precision computing is enabled in appropriate places.
 
-The relevant PyTorch version is 2.6, CUDA version is 12.6, and the Python version should be 3.9 or above (3.8 is also tested without any problems). In addition to the commonly used libraries such as numpy and json, we also used OpenCV for connected domain analysis. The GitHub link to the relevant repository will be attached at the end of the report.
+The relevant PyTorch version is 2.6, CUDA version is 12.6, and the Python version should be 3.9 or above (3.8 is also fine, and the latest 3.13 has been tested without any problems). In addition to the commonly used libraries such as NumPy and JSON, we also used OpenCV for connected domain analysis. The GitHub link to the relevant repository will be attached at the end of the report. The libraries used are mostly common libraries.
 
 
 
-\subsection{Hyperparameter Settings}
+\subsection{Hyperparameter Settings (need to be modified)}
 % This subsection lists in detail the hyperparameters used in the training process, such as learning rate, batch size, number of epochs, etc., and explains the reasons for these choices.
 
 % 在我们的实验中使用的超参数配置是根据初步实验和文献综述精心选择的。表1展示了我们训练过程中使用的关键超参数。
@@ -340,6 +373,12 @@ Where TP is true positive, FP is false positive, FN is false negative, N is the 
 
 \section{Results}
 % mAP/IoU scores, class-wise analysis, qualitative results
+
+%训练过程中的损失和准确率如下图所示：
+
+
+
+
 \subsection{Overall Performance}
 % This subsection presents the overall performance of the model on the test set, including average precision and IoU scores.
 
@@ -440,47 +479,8 @@ It can be seen that the background class (0) occupies the vast majority of pixel
 
 % 1. **智能缓存系统**：我们开发了一个高效的缓存系统，用于识别和记录包含少数类的图像。该系统分析整个数据集并将结果存储在JSON文件中，避免每次训练都进行耗时的数据集分析。
 
-% ```python
-% def _load_or_create_rare_class_cache(self):
-%     """加载或创建少数类图像缓存"""
-%     if self.use_cache and osp.exists(self.rare_class_cache_file):
-%         print(f"正在加载少数类缓存: {self.rare_class_cache_file}")
-%         with open(self.rare_class_cache_file, 'r') as f:
-%             return json.load(f)
-%     else:
-%         print("正在分析数据集以识别少数类图像...")
-%         rare_class_images = {}
-%         for idx in tqdm(range(len(self.images)), desc="分析少数类"):
-%             # 分析逻辑...
-%             unique_classes = torch.unique(label_gray).tolist()
-%             rare_classes = [cls for cls in unique_classes if cls in [4, 5]]
-            
-%             if rare_classes:
-%                 rare_class_images[image_name] = {"rare_classes": rare_classes}
-% ```
-
 % 2. **针对性数据增强**：对包含少数类(MotorcycleScooter和Truck_Bus)的图像应用更强的数据增强，包括水平翻转和色彩变换，同时保持语义一致性。
 
-% ```python
-% if contains_rare_class:
-%     # 为图像和对应标签使用相同随机种子确保一致性
-%     seed = torch.randint(0, 2**32, (1,)).item()
-    
-%     # 图像增强
-%     torch.manual_seed(seed)
-%     random.seed(seed)
-%     image_transform = transforms.Compose([
-%         transforms.RandomHorizontalFlip(p=0.5),
-%         transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2)
-%     ])
-    
-%     # 标签对应转换
-%     torch.manual_seed(seed)
-%     random.seed(seed)
-%     label_transform = transforms.Compose([
-%         transforms.RandomHorizontalFlip(p=0.5)
-%     ])
-% ```
 1. \textbf{Smart Caching System}: We developed an efficient caching system to identify and record images containing minority classes. The system analyzes the entire dataset and stores the results in a JSON file to avoid time-consuming dataset analysis for each training.
 
 2. \textbf{Targeted Data Augmentation}: Apply stronger data augmentation to images containing minority classes (MotorcycleScooter and Truck\_Bus), including horizontal flipping and color changes, while maintaining semantic consistency.
@@ -490,53 +490,13 @@ It can be seen that the background class (0) occupies the vast majority of pixel
 
 % 1. **自适应类别权重**：基于像素频率计算反比例权重，少数类获得更高权重：
 
-% ```python
-% class_weights = torch.ones(6)
-% for cls, count in class_counts.items():
-%     if count > 0:
-%         class_weights[cls] = total_pixels / (len(class_counts) * count)
-% ```
-
-% 计算得到的权重如下，可见少数类MotorcycleScooter获得了远高于其他类的权重：
-% ```
-% 类别权重: tensor([3.2923e-04, 1.0092e-02, 5.0830e-02, 6.6542e-02, 5.7037e+00, 1.6853e-01])
-% ```
 
 % 2. **分割任务的Focal Loss**：实现高度优化的Focal Loss，专注于难以分类的像素和少数类：
 
-% ```python
-% class FocalLoss(nn.Module):
-%     def forward(self, inputs, targets):
-%         # 计算交叉熵损失(使用类别权重)
-%         ce_loss = F.cross_entropy(inputs, targets, reduction='none', weight=self.alpha)
-        
-%         # 获取预测概率并计算目标类的预测概率
-%         inputs_softmax = F.softmax(inputs, dim=1)
-%         targets_one_hot = F.one_hot(targets, num_classes=inputs.size(1))
-%         targets_one_hot = targets_one_hot.permute(0, 3, 1, 2).float()
-%         pt = (inputs_softmax * targets_one_hot).sum(dim=1)
-        
-%         # 应用Focal Loss公式，降低易分类样本的贡献
-%         focal_weight = (1 - pt) ** self.gamma
-%         loss = focal_weight * ce_loss
-% ```
+
 
 % 3. **YOLO检测的Focal Loss变体**：为目标检测任务设计的专用Focal Loss，同时考虑类别和定位精度：
 
-% ```python
-% def yolo_loss(predictions, targets, Sx, Sy, B=1, C=5, lambda_coord=5, lambda_noobj=0.5, gamma=2.0, alpha=0.25):
-%     # 区分正负样本的alpha
-%     pos_mask = (target_class > 0.5)
-%     neg_mask = ~pos_mask
-%     alpha_weight = pos_mask * alpha + neg_mask * (1-alpha)
-    
-%     # 应用Focal Loss权重
-%     focal_weight = alpha_weight * (1 - pt) ** gamma
-    
-%     # 只对有目标的网格计算类别损失
-%     obj_expanded = obj_mask.unsqueeze(-1).expand_as(pred_class)
-%     focal_loss = focal_weight * bce_loss * obj_expanded
-% ```
 
 1. **Adaptive Class Weights**: Calculate inverse proportion weights based on pixel frequencies, with minority classes receiving higher weights:
 
@@ -642,6 +602,7 @@ This section summarizes the main findings and contributions of the research. It 
 Thanks to [relevant personnel/institutions] for their support of this research.
 
 \begin{thebibliography}{00}
+\bibitem{b0} [ResNet50 related citation]
 \bibitem{b1} [YoloV3 related citation]
 \bibitem{b2} [Deeplabv3 related citation]
 \bibitem{b3} [CamVid dataset related citation]
